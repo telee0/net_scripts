@@ -11,3 +11,10 @@ https://scapy.net
 ## Tested with IP/TCP/UDP/ICMP
 
 Destination MAC is always required so we have a database in the script to keep host details.
+
+`
+$ pip freeze
+scapy==2.6.1
+setuptools==80.9.0
+wheel==0.45.1
+`
