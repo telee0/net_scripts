@@ -13,6 +13,28 @@ https://scapy.net
 Destination MAC is always required so we have a database in the script to keep host details.
 
 ```
+hosts = {
+    'tl-ubuntu-01': {
+        'ip': "1.1.0.236",
+        'mac': "64:9d:99:b1:12:3a",
+        'iface': 'ens192',
+    },
+    'tl-ubuntu-02': {
+        'ip': "1.1.0.237",
+        'mac': "64:9d:99:b1:12:3b",
+        'iface': 'ens192',
+    },
+    'tl-ubuntu-03': {
+        'ip': "1.1.0.238",
+        'mac': "64:9d:99:b1:12:3c",
+        'iface': 'ens192',
+    },
+}
+```
+
+Scapy is required to manipluate packets
+
+```
 $ pip freeze
 scapy==2.6.1
 setuptools==80.9.0
