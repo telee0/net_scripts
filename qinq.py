@@ -26,7 +26,7 @@ conf.L3socket = L3RawSocket  # key for local injection
 cf = {
     's_vlan': 100,
     'c_vlans': [100, 200, 300, 400, 500],  # , 600]
-    'ethertype': None,  # 0x88a8 not working for PA (POC12966/POC17503) so None, default 0x8100
+    'ethertype': None,  # 0x88a8, or None for default 0x8100
     'sniff_filter_in': "vlan and ether dst host {}",
     'sniff_filter_out': "not vlan and ether src host {}",
     'version': "1.0 [20251114]",
@@ -55,12 +55,6 @@ hosts = {
         'mac': "64:9d:99:b1:12:3d",
         'iface': 'ens192',
     },
-    'M-KGVMGHP6FC': {
-        'ip': "192.168.1.171",
-        'mac': "c8:89:f3:e8:69:ce",
-        'iface': 'en0',
-    }
-
 }
 
 me = {}
