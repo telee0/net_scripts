@@ -1,4 +1,4 @@
-*** qinq v1.0 [20251114]
+# qinq v1.0 [20251114]
 
 Script to bridge end hosts over QinQ
 
@@ -8,6 +8,6 @@ https://github.com/telee0/poc_scripts
 
 https://scapy.net
 
+## Tested with IP/TCP/UDP/ICMP
 
-Tested with IP/TCP/UDP/ICMP
 Destination MAC is always required so we have a database in the script to keep host details.
