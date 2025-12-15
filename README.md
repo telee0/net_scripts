@@ -15,16 +15,17 @@ Destination MAC is always required so we have a database in the script to keep h
 ```
 hosts = {
     'tl-ubuntu-01': {
-        'ip': "1.1.0.236",
+        'ipv4': "1.1.0.236",
+        'ipv6': "2001::236",
         'mac': "64:9d:99:b1:12:3a",
         'iface': 'ens192',
     },
     'tl-ubuntu-02': {
-        'ip': "1.1.0.237",
+        'ipv4': "1.1.0.237",
+        'ipv6': "2001::237",
         'mac': "64:9d:99:b1:12:3b",
         'iface': 'ens192',
     },
-}
 ```
 
 Scapy is required to manipluate packets
