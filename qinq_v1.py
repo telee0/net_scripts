@@ -17,12 +17,9 @@ import threading
 import time
 
 from scapy.layers.inet import IP, TCP, UDP, ICMP
-from scapy.layers.inet6 import IPv6
 from scapy.layers.l2 import Ether, Dot1Q
 
-# conf.L3socket = L3RawSocket6  # key for local injection
-sock_v4 = L3RawSocket()
-sock_v6 = L3RawSocket6()
+conf.L3socket = L3RawSocket  # key for local injection
 
 # --------- --------- --------- --------- --------- --------- --------- ---------
 
@@ -32,47 +29,39 @@ cf = {
     'ethertype': None,  # 0x88a8, or None for default 0x8100
     'sniff_filter_in': "vlan and ether dst host {}",
     'sniff_filter_out': "not vlan and ether src host {}",
-    'version': "2.0 [20251214]",
+    'version': "1.0 [20251114]",
     'verbose': True,
     'debug': False,
-    'neigh_add': {
-        'v4': {
-            'cmd_add': ["ip", "neigh", "replace", "{ip}", "lladdr", "{mac}", "dev", "{iface}", "nud", "permanent"],
-            'cmd_check': ["ip", "neigh", "show", "{ip}"],
-            'cmd_show': "ip -4 neigh show",
-            'txt_neigh': "Current ARP table:\n",
-        },
-        'v6': {
-            'cmd_add': ["ip", "-6", "neigh", "replace", "{ip}", "lladdr", "{mac}", "dev", "{iface}", "nud", "permanent"],
-            'cmd_check': ["ip", "-6", "neigh", "show", "{ip}"],
-            'cmd_show': "ip -6 neigh show",
-            'txt_neigh': "Current IPv6 neighbor table:\n",
-        },
-    },
 }
 
 hosts = {
     'tl-ubuntu-01': {
-        'ipv4': "1.1.0.236",
-        'ipv6': "2001::236",
+        'ip': "1.1.0.236",
         'mac': "64:9d:99:b1:12:3a",
         'iface': 'ens192',
     },
     'tl-ubuntu-02': {
-        'ipv4': "1.1.0.237",
-        'ipv6': "2001::237",
+        'ip': "1.1.0.237",
         'mac': "64:9d:99:b1:12:3b",
         'iface': 'ens192',
     },
-    'ubuntu-36': {
-        'ipv4': "1.1.0.36",
-        'ipv6': "2001::36",
+    'tl-ubuntu-03': {
+        'ip': "1.1.0.238",
+        'mac': "64:9d:99:b1:12:3c",
+        'iface': 'ens192',
+    },
+    'tl-ubuntu-04': {
+        'ip': "1.1.0.239",
+        'mac': "64:9d:99:b1:12:3d",
+        'iface': 'ens192',
+    },
+    'ubuntu-236': {
+        'ip': "1.1.0.236",
         'mac': "bc:24:11:59:2b:af",
         'iface': 'enp6s19',
     },
-    'ubuntu-37': {
-        'ipv4': "1.1.0.37",
-        'ipv6': "2001::37",
+    'ubuntu-237': {
+        'ip': "1.1.0.237",
         'mac': "bc:24:11:12:d6:b1",
         'iface': 'enp6s19',
     },
@@ -83,27 +72,27 @@ verbose, debug = cf['verbose'], cf['debug']
 
 # --------- --------- --------- --------- --------- --------- --------- ---------
 
-def neigh_add(ip_mac_dict, iface, ip_ver=4):
-    func = "neigh_add"
+def arp_add(ip_mac_dict, iface):
+    func = "arp_add"
 
-    neigh = cf[func]['v' + str(ip_ver)]
+    for ip in ip_mac_dict.keys():
+        mac = ip_mac_dict[ip]
 
-    for ip, mac in ip_mac_dict.items():
-        cmd_add = [s.format_map({'ip': ip, 'mac': mac, 'iface': iface}) for s in neigh['cmd_add']]
+        cmd_add = ["sudo", "ip", "neigh", "replace", ip, "lladdr", mac, "dev", iface, "nud", "permanent"]
         result = subprocess.run(cmd_add, capture_output=True, text=True)
 
         if result.returncode != 0:
             print(f"[{func}] Failed to add {ip} -> {mac}")
             print(result.stderr)
 
-    print(neigh['txt_neigh'])
+    print("Current ARP table:\n")
+    print(subprocess.getoutput("ip neigh show"))
 
-    if debug:
-        print(subprocess.getoutput(neigh['cmd_show']))
-        print()
+    for ip in ip_mac_dict.keys():
+        mac = ip_mac_dict[ip]
 
-    for ip, mac in ip_mac_dict.items():
-        cmd_check = [s.format_map({'ip': ip}) for s in neigh['cmd_check']]
+        # cmd_check = ["ip", "neigh", "show", ip, "dev", iface, "nud", "permanent"]
+        cmd_check = ["ip", "neigh", "show", ip]
         result = subprocess.run(cmd_check, capture_output=True, text=True)
 
         if ip in result.stdout and mac.lower() in result.stdout.lower():
@@ -116,9 +105,9 @@ def neigh_add(ip_mac_dict, iface, ip_ver=4):
 
 def init():
     global me
+    global verbose  # , debug
 
-    ip2mac_v4, mac2ip_v4 = {}, {}
-    ip2mac_v6, mac2ip_v6 = {}, {}
+    ip2mac, mac2ip = {}, {}
 
     # find myself from the host list
     #
@@ -128,26 +117,14 @@ def init():
         if 'iface' in host and host['iface'] in iface_list:
             mac = get_if_hwaddr(host['iface'])
             if 'mac' in host and mac.lower() == host['mac'].lower():
-                ipv4 = get_if_addr(host['iface'])
-                ipv6 = get_if_addr6(host['iface'])
-                if 'ipv4' in host and ipv4 == host['ipv4']:
+                ip = get_if_addr(host['iface'])
+                if 'ip' in host and ip == host['ip']:
                     me = {
                         'name': host_name,
-                        'ipv4': ipv4,
+                        'ip': host['ip'],
                         'mac': host['mac'],
                         'iface': host['iface'],
                     }
-                if 'ipv6' in host and ipv6 == host['ipv6']:
-                    if me:
-                        me['ipv6'] = ipv6
-                    else:
-                        me = {
-                            'name': host_name,
-                            'ipv6': ipv6,
-                            'mac': host['mac'],
-                            'iface': host['iface'],
-                        }
-                if me:
                     break
 
     if not me:
@@ -171,50 +148,34 @@ def init():
     #
     for host_name in hosts.keys():
         host = hosts[host_name]
-        if 'ipv4' in host:
-            ip2mac_v4[host['ipv4']] = host['mac']
-            mac2ip_v4[host['mac']] = host['ipv4']
-        if 'ipv6' in host:
-            ip2mac_v6[host['ipv6']] = host['mac']
-            mac2ip_v6[host['mac']] = host['ipv6']
+        ip2mac[host['ip']] = host['mac']
+        mac2ip[host['mac']] = host['ip']
 
-    del ip2mac_v4[me['ipv4']]
-    del mac2ip_v4[me['mac']]
-    del ip2mac_v6[me['ipv6']]
-    del mac2ip_v6[me['mac']]
+    del ip2mac[me['ip']]
+    del mac2ip[me['mac']]
 
-    # Add static IP-to-MAC entries for neighbor hosts
+    # Add static ARP entries with OS `arp -s` commands
     #
-    neigh_add(ip2mac_v4, me['iface'], ip_ver=4)
-    neigh_add(ip2mac_v6, me['iface'], ip_ver=6)
+    arp_add(ip2mac, me['iface'])
 
     if debug:
         print("IP-to-MAC mapping")
-        for ip, mac in ip2mac_v4.items():
-            print(f"{ip} -> {mac}")
-        for ip, mac in ip2mac_v6.items():
-            print(f"{ip} -> {mac}")
+        for ip in ip2mac.keys():
+            print(f"{ip} -> {ip2mac[ip]}")
         print("MAC-to-IP mapping")
-        for mac, ip in mac2ip_v4.items():
-            print(f"{mac} -> {ip}")
-        for mac, ip in mac2ip_v6.items():
-            print(f"{mac} -> {ip}")
+        for mac in mac2ip.keys():
+            print(f"{mac} -> {mac2ip[mac]}")
         print()
 
 
 def encap(pkt):
-    if IP in pkt:
-        ip_ver = 4
-        ip = pkt[IP].copy()
-    elif IPv6 in pkt:
-        ip_ver = 6
-        ip = pkt[IPv6].copy()
-    else:
+    if IP not in pkt:
         return pkt
 
-    if ip_ver == 4:
-        del ip.len
-        del ip.chksum
+    ip = pkt[IP].copy()
+
+    del ip.len
+    del ip.chksum
     if TCP in ip:
         del ip[TCP].chksum
     if UDP in ip:
@@ -239,11 +200,7 @@ def encap(pkt):
 
 
 def decap(pkt):
-    if IP in pkt:
-        ip_ver = 4
-    elif IPv6 in pkt:
-        ip_ver = 6
-    else:
+    if IP not in pkt:
         return pkt
 
     p = pkt.copy()
@@ -257,13 +214,10 @@ def decap(pkt):
     if debug:
         print("decap: VLAN stack ==", vlans[::-1])
 
-    if ip_ver == 4:
-        ip = p[IP]
-        del ip.len
-        del ip.chksum
-    else:
-        ip = p[IPv6]
+    ip = p[IP]
 
+    del ip.len
+    del ip.chksum
     if TCP in ip:
         del ip[TCP].chksum
     if UDP in ip:
@@ -285,7 +239,7 @@ def outbound(pkt):
     if verbose:
         print("[outbound]")
     p = encap(pkt)
-    sendp(p, iface=me['iface'], verbose=1)
+    sendp(p, iface=me['iface'], verbose=0)
     if verbose:
         print(f"outbound: {p.summary()}")
 
@@ -294,21 +248,13 @@ def inbound(pkt):
     if verbose:
         print("[inbound]")
     p = decap(pkt)
-
-    # layer-3 send() to forward the packet to the local process on the same host
-    #
-    if IP in p:
-        sock_v4.send(p)  # , verbose=1)
-    elif IPv6 in p:
-        sock_v6.send(p)  # , verbose=1)
-    else:
-        pass  # ignore, pending extension
-
+    send(p, verbose=1)  # layer-3 send() to forward the packet to the local process on the same host
     if verbose:
         print(f"inbound: {p.summary()}")
 
 
 def sniff_outbound():
+    global cf, me
     filter_bpf = cf['sniff_filter_out'].format(me['mac'].replace(':', ''))
     if verbose:
         print("[sniff_outbound]")
@@ -322,6 +268,7 @@ def sniff_outbound():
 
 
 def sniff_inbound():
+    global cf, me
     filter_bpf = cf['sniff_filter_in'].format(me['mac'].replace(':', ''))
     if verbose:
         print("[sniff_inbound]")
@@ -342,10 +289,7 @@ if __name__ == "__main__":
     print("Host name:", me['name'])
     print("Interface:", me['iface'])
     print("MAC address:", me['mac'])
-    if 'ipv4' in me:
-        print("IPv4 address:", me['ipv4'])
-    if 'ipv6' in me:
-        print("IPv6 address:", me['ipv6'])
+    print("IP address:", me['ip'])
     print("VLAN stack:", cf['c_vlans'])
     print()
 
