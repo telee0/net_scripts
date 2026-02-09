@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 
-qinq v1.0 [20251114]
+qinq v2.1 [20260126]
 
 Script to bridge end hosts over QinQ
 
@@ -27,12 +27,19 @@ sock_v6 = L3RawSocket6()
 # --------- --------- --------- --------- --------- --------- --------- ---------
 
 cf = {
-    's_vlan': 100,
-    'c_vlans': [100, 200, 300, 400, 500],  # , 600]
-    'ethertype': None,  # 0x88a8, or None for default 0x8100
+    'qinq_vlans': [  # last ethertype will be ignored
+        # (100, 0x8100), (100, 0x8100), (200, 0x8100), (300, 0x8100), (400, 0x8100), (500, 0x8100), (600, 0x8100),
+        # (100, 0x8100), (100, 0x8100), (200, 0x88a8), (300, 0x88a8), (400, 0x88a8), (500, 0x88a8), (600, 0x88a8),
+        # (100, 0x8100), (100, 0x8100), (200, 0x88a8), (300, 0x8100), (400, 0x88a8), (500, 0x8100), (600, 0x88a8),
+        # (100, 0x8100), (100, 0x8100), (200, 0x8100), (300, 0x88a8), (400, 0x8100), (500, 0x88a8), (600, 0x8100),
+        # (100, 0x88a8), (200, 0x8100), (300, 0x8100), (400, 0x8100), (500, 0x8100), (600, 0x8100),
+        # (100, 0x88a8), (200, 0x88a8), (300, 0x88a8), (400, 0x88a8), (500, 0x88a8), (600, 0x88a8),
+        # (100, 0x88a8), (200, 0x88a8), (300, 0x8100), (400, 0x88a8), (500, 0x8100), (600, 0x88a8),
+        (100, 0x88a8), (200, 0x8100), (300, 0x88a8), (400, 0x8100), (500, 0x88a8), (600, 0x8100),
+    ],
     'sniff_filter_in': "vlan and ether dst host {}",
     'sniff_filter_out': "not vlan and ether src host {}",
-    'version': "2.0 [20251214]",
+    'version': "2.1 [20260126]",
     'verbose': True,
     'debug': False,
     'neigh_add': {
@@ -62,6 +69,18 @@ hosts = {
         'ipv4': "1.1.0.237",
         'ipv6': "2001::237",
         'mac': "64:9d:99:b1:12:3b",
+        'iface': 'ens192',
+    },
+    'tl-ubuntu-03': {
+        'ipv4': "1.1.0.238",
+        'ipv6': "2001::238",
+        'mac': "64:9d:99:b1:12:3c",
+        'iface': 'ens192',
+    },
+    'tl-ubuntu-04': {
+        'ipv4': "1.1.0.239",
+        'ipv6': "2001::239",
+        'mac': "64:9d:99:b1:12:3d",
         'iface': 'ens192',
     },
     'ubuntu-36': {
@@ -154,10 +173,11 @@ def init():
         print("Host not identified. Please check your configuration.")
         exit(1)
 
-    cf['vlan_layers'] = len(cf['c_vlans']) + 1
+    cf['n_vlans'] = len(cf['qinq_vlans'])
 
     # check cf['s_vlan']
     #
+    '''
     if 's_vlan' not in cf:
         print("S-VLAN not defined. Please check your configuration.")
         exit(1)
@@ -166,6 +186,7 @@ def init():
         if type(s_vlan) is not int or s_vlan < 1 or s_vlan > 4094:
             print(f"S-VLAN {s_vlan} invalid. Please check your configuration.")
             exit(1)
+    '''
 
     # Cache IP-to-MAC and MAC-to-IP mappings
     #
@@ -223,12 +244,20 @@ def encap(pkt):
         del ip[ICMP].chksum
 
     p = Ether(src=pkt[Ether].src, dst=pkt[Ether].dst)
-    if 'ethertype' in cf and cf['ethertype'] == 0x88a8:
-        p /= Dot1Q(vlan=cf['s_vlan'], type=cf['ethertype'])
-    else:
-        p /= Dot1Q(vlan=cf['s_vlan'])  # 0x8100
-    for c_vlan in cf['c_vlans']:
-        p /= Dot1Q(vlan=c_vlan)
+
+    n = cf['n_vlans'] - 1
+    for i, tag in enumerate(cf['qinq_vlans']):
+        if isinstance(tag, tuple):
+            vlan, etype = tag
+        else:
+            vlan = tag
+            etype = None
+        if i == n:
+            etype = None
+        if etype is not None:
+            p /= Dot1Q(vlan=vlan, type=etype)
+        else:
+            p /= Dot1Q(vlan=vlan)
 
     p /= ip
 
@@ -346,7 +375,7 @@ if __name__ == "__main__":
         print("IPv4 address:", me['ipv4'])
     if 'ipv6' in me:
         print("IPv6 address:", me['ipv6'])
-    print("VLAN stack:", cf['c_vlans'])
+    print("VLAN stack:", cf['qinq_vlans'])
     print()
 
     threading.Thread(target=sniff_outbound, daemon=True).start()
